@@ -1,19 +1,16 @@
 import tweepy
 import logging
-import time
 import datetime
+import pytz
+
+utc=pytz.UTC
 
 # Authenticate to Twitter
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger()
-
 msgs = {
     "!nfts": """
     	debunking misconceptions about tripleS and NFTs: a thread
     	'The NFT itself is not a core value of our system. I started this project to have more participation from fans and more activity. As a voting tool, the NFT has a certain value and transparency because it cannot be manipulated. 
         We could vote via email, text or CD, but we’ve seen many manipulation scandals. With this technology, we have integrity in our votes. TripleS is a girl group with many decisions made by fan vote, not a girl group with NFTs.' ~ jaden jeong in an interview with NME
-        additionally, polygon (the blockchain system that modhaus is running on) has pledged to become carbon negative by the end of 2022. https://polygon.technology/blog/polygon-is-going-carbon-negative-in-2022-with-a-20-million-pledge
-        polygon has already reached carbon neutrality as of june 2022. https://www.prnewswire.com/ae/news-releases/polygon-network-reaches-first-sustainability-milestone-by-achieving-carbon-neutrality-301571777.html
         read more here: https://twitter.com/gwnyoo/status/1587253190885605379?s=20&t=KfAttZgS-aFSylnKJ1ZfTg
         source of interview: https://www.nme.com/news/music/jaden-jeong-triples-acid-angel-from-asia-disband-controversy-interview-modhaus-nft-3363178
     """,
@@ -25,13 +22,13 @@ msgs = {
         source of interview: https://www.nme.com/news/music/jaden-jeong-triples-acid-angel-from-asia-disband-controversy-interview-modhaus-nft-3363178
     """,
     "!jj": """
-        jaden jeong isn't the best person, but he wasn't as shit as you guys make him out to be. if you even knew how the k-pop industry works, you would know most of the things that jaden jeong allegedly did were obviously not true.
+        jaden jeong isn't the best person, but god fucking dammit he wasn't as shit as you guys make him out to be. if you even knew how the k-pop industry works, you would know most of the things that jaden jeong allegedly did were obviously not true.
         read more here: https://www.reddit.com/r/LOONA/comments/nmm7ea/lets_lay_to_rest_this_false_narrative_that_jaden/
     """,
     "!voting": """
     	debunking misconceptions about the tripleS voting system: a thread
-        tripleS' voting system is not like a survival system. so far, the only form of fan voting to decide members of a unit was in the form of 'grand gravity'. 
-        the first grand gravity separated S1-S8 into 4 pairs. in each pair, one member would be in the unit AAA while the other would be in the unit KRE. each member at the time had a chance to debut in a unit. 
+        tripleS' voting system is not like a survival system. so far, the only form of fan voting to decide members of a unit was in the form of 'grand gravity'. the first grand gravity separated S1-S8 into 4 pairs. 
+        in each pair, one member would be in the unit AAA while the other would be in the unit KRE. each member at the time had a chance to debut in a unit. 
         this allows all members to get to debut in at least one unit, and does not leave any members being treated extremely unfairly (left out of unit activities / without a unit / etc.) as you can see from the tweet below, each member was placed in a unit.
 https://twitter.com/triplescosmos/status/1574005796693839875
     """,
@@ -41,7 +38,6 @@ https://twitter.com/triplescosmos/status/1574005796693839875
     """,
     "!guide": """
     	to learn more about tripleS, read varsha (@vibts713)'s guide here: https://docs.google.com/presentation/d/1rjc9o6Wm2NLOPuPdMVt0oCXIDIYobVMdVIUmNmcU2rc/edit?usp=sharing
-       	for a shorter and less dense timeline, try shua (@kajetesantakalu, the bot's creator)'s timeline here: https://triples-timeline.carrd.co
         for even more information, join the discord server at https://discord.gg/triplescosmos!
     """,
     "!help": """
@@ -51,52 +47,64 @@ https://twitter.com/triplescosmos/status/1574005796693839875
 
 id = 1608738653559488514
 
-def log(info):
-    logger.info(str(datetime.datetime.now()) + " " + info )
-
 def create_client():
     client = tweepy.Client(
-        # secrecy
+        consumer_key="zdlLN0kAr1D4dYbJyTyAzfGHg",
+        consumer_secret="SLWQsQmiQ87jAMBtOCEE6TM5wGByRDk5cFJHXla00UFd1rpUDn",
+        access_token="1608738653559488514-qOJxFiqg7wsjllTe3QHwpEwOp8g7gY",
+        access_token_secret="Hh432CsX5yIFf8kOf8lJPkoggZ6z6ukKjuDw7suNVDTWZ",
+        bearer_token="AAAAAAAAAAAAAAAAAAAAAI2pkwEAAAAAsCh6efOxZumxm%2FiCzrxG28cXAMI%3DBO4av3FvP1Qkn2opyQrkCrmXlNdAee9xLeIf6wAqWP7z2nNn9X",
     )
-    log("client created")
     return client
 
-def check_mentions(client, keywords, since_id):
-    log("retrieving mentions")
-    new_since_id = since_id
-    ments = client.get_users_mentions(id, since_id=since_id).data
-    if ments is not None:
-        for tweet in ments:
-            if any(keyword in tweet.text.lower() for keyword in keywords):
-                new_since_id = max(tweet.id, new_since_id)
-                for keyword in keywords:
-                    if keyword in tweet.text.lower():
-                        try:
-                            tweets = [tweet.id]
-                            text = [l.strip() for l in msgs[keyword].split("\n") if l.strip() != ""]
-                            for t in text:
-                                if t != "":
-                                    newt = client.create_tweet(
-                                        text=t,
-                                        in_reply_to_tweet_id=tweets[-1],
-                                        user_auth=True
-                                    ).data
-                                    tweets.append(newt["id"])
-                            log(f"answering with keyword {keyword}, tweet id {tweet.id}")
-                        except tweepy.errors.Forbidden:
-                            return new_since_id + 1
-    return new_since_id
+def check_mentions(client, keywords, start, end):
+    stats = {
+        "commands": {command: 0 for command in keywords},
+        "users": {}
+    }
+    start = utc.localize(datetime.datetime.combine(start, datetime.time(0, 0)))
+    end = utc.localize(datetime.datetime.combine(end, datetime.time(0, 0)))
+    lastsid = 1
+    while 1:
+        brk = False
+        ids = [t.id for t in client.get_users_mentions(id, start_time=start, since_id=lastsid, max_results=100).data if any(keyword in t.text for keyword in keywords)]
+        if len(ids) == 0:
+            break
+        ments = client.get_tweets(ids, tweet_fields=["created_at", "author_id", "in_reply_to_user_id"]).data
+        ol = lastsid
+        if ments is not None:
+            lastsid = ments[0].id
+            for tweet in ments:
+                dt = tweet.created_at
+                if dt > start and dt < end and tweet.in_reply_to_user_id != None:
+                    for k in keywords:
+                        if k in tweet.text:
+                            try:
+                                stats["commands"][k] += 1
+                            except:
+                                pass
+                    try:
+                        stats["users"][client.get_user(id=tweet.author_id).data.username] += 1
+                    except:
+                        stats["users"][client.get_user(id=tweet.author_id).data.username] = 1
+                elif dt > end:
+                    brk = True
+                    break
+        if brk == True or ol == lastsid:
+            break
+    return stats
 
 def main():
+    stt = datetime.date(2023, 1, 1)
+    end = datetime.date(2023, 1, 31)
     client = create_client()
-    with open('readme.txt') as f:
-        since_id = int(f.readlines()[0].strip())
-    while True:
-        since_id = check_mentions(client, list(msgs.keys()), since_id)
-        log("waiting...")
-        with open('readme.txt', 'w') as f:
-            f.write(str(since_id))
-        time.sleep(10)
+    stats = check_mentions(client, list(msgs.keys()), stt, end)
+    for x in stats:
+        stats[x] = {k: v for k, v in sorted(stats[x].items(), key=lambda item: item[1], reverse=True)}
+        for y in stats[x]:
+            if y != "tripleSinfobot":
+                print(y, stats[x][y])
+        print()
 
 if __name__ == "__main__":
     main()
